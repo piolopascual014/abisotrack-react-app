@@ -41,8 +41,14 @@ export interface SmsLog {
   id: ID;
   alertId: ID;
   contactId: ID;
-  status: "queued" | "delivered";
+  status: "queued" | "sending" | "sent" | "delivered" | "failed";
   createdAt: string;
+  updatedAt: string;
+  attempts: number;
+  gatewayId: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  errorMessage: string | null;
 }
 
 export interface UserRecord {

@@ -61,9 +61,29 @@ create table if not exists public.sms_logs (
   id uuid primary key default gen_random_uuid(),
   alert_id uuid not null references public.alerts(id) on delete cascade,
   contact_id uuid not null references public.contacts(id) on delete cascade,
-  status text not null default 'queued' check (status in ('queued', 'delivered')),
+  status text not null default 'queued' check (status in ('queued', 'sending', 'sent', 'delivered', 'failed')),
+  attempts integer not null default 0,
+  gateway_id text,
+  claimed_at timestamptz,
+  sent_at timestamptz,
+  delivered_at timestamptz,
+  error_message text,
+  updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
+-- Upgrade older demo databases without deleting their existing SMS history.
+alter table public.sms_logs add column if not exists attempts integer not null default 0;
+alter table public.sms_logs add column if not exists gateway_id text;
+alter table public.sms_logs add column if not exists claimed_at timestamptz;
+alter table public.sms_logs add column if not exists sent_at timestamptz;
+alter table public.sms_logs add column if not exists delivered_at timestamptz;
+alter table public.sms_logs add column if not exists error_message text;
+alter table public.sms_logs add column if not exists updated_at timestamptz not null default now();
+alter table public.sms_logs drop constraint if exists sms_logs_status_check;
+alter table public.sms_logs add constraint sms_logs_status_check
+  check (status in ('queued', 'sending', 'sent', 'delivered', 'failed'));
+create index if not exists sms_logs_gateway_queue_idx on public.sms_logs (status, created_at);
 
 create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
@@ -206,7 +226,10 @@ begin
 
   if p_send and 'sms' = any(coalesce(p_channels, '{}'::text[])) then
     insert into public.sms_logs (alert_id, contact_id, status)
-    select v_id, contact_id, 'queued' from public.alert_recipients where alert_id = v_id;
+    select v_id, ar.contact_id, 'queued'
+    from public.alert_recipients ar
+    join public.contacts c on c.id = ar.contact_id
+    where ar.alert_id = v_id and c.consent and c.phone_normalized <> '';
   end if;
 
   insert into public.audit_entries (actor, action)
@@ -322,6 +345,83 @@ begin
 end;
 $$;
 
+-- Atomically reserves a small SMS batch for one signed-in Android gateway.
+-- Stale reservations are returned to the queue automatically after five minutes.
+create or replace function public.gateway_claim_sms(
+  p_gateway_id text,
+  p_limit integer default 5
+) returns table (
+  job_id uuid,
+  phone text,
+  message text,
+  attempt integer
+)
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_limit integer := least(greatest(coalesce(p_limit, 5), 1), 10);
+begin
+  if auth.uid() is null then raise exception 'Gateway sign-in required'; end if;
+  if trim(coalesce(p_gateway_id, '')) = '' then raise exception 'Gateway ID is required'; end if;
+
+  return query
+  with candidates as (
+    select s.id
+    from public.sms_logs s
+    where s.attempts < 3
+      and (s.status = 'queued' or (s.status = 'sending' and s.claimed_at < now() - interval '5 minutes'))
+    order by s.created_at
+    for update skip locked
+    limit v_limit
+  ), claimed as (
+    update public.sms_logs s
+    set status = 'sending', attempts = s.attempts + 1,
+        gateway_id = trim(p_gateway_id), claimed_at = now(),
+        error_message = null, updated_at = now()
+    from candidates c
+    where s.id = c.id
+    returning s.id, s.alert_id, s.contact_id, s.attempts
+  )
+  select c.id, ct.phone,
+         'ABISOTRACK: ' || a.title || E'\n' || a.message,
+         c.attempts
+  from claimed c
+  join public.contacts ct on ct.id = c.contact_id
+  join public.alerts a on a.id = c.alert_id
+  order by c.id;
+end;
+$$;
+
+create or replace function public.gateway_update_sms(
+  p_job_id uuid,
+  p_gateway_id text,
+  p_status text,
+  p_error text default null
+) returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_updated integer;
+begin
+  if auth.uid() is null then raise exception 'Gateway sign-in required'; end if;
+  if p_status not in ('sent', 'delivered', 'failed') then raise exception 'Invalid SMS status'; end if;
+
+  update public.sms_logs
+  set status = p_status,
+      sent_at = case when p_status in ('sent', 'delivered') then coalesce(sent_at, now()) else sent_at end,
+      delivered_at = case when p_status = 'delivered' then coalesce(delivered_at, now()) else delivered_at end,
+      error_message = case when p_status = 'failed' then left(coalesce(p_error, 'SMS send failed'), 500) else null end,
+      updated_at = now()
+  where id = p_job_id and gateway_id = trim(p_gateway_id);
+  get diagnostics v_updated = row_count;
+  return v_updated > 0;
+end;
+$$;
+
 create or replace function public.reset_demo_data()
 returns void
 language plpgsql
@@ -349,6 +449,8 @@ revoke all on function public.save_alert(text,text,text,boolean,uuid[],text[],bo
 revoke all on function public.student_login(text,text) from public;
 revoke all on function public.student_snapshot(text) from public;
 revoke all on function public.student_acknowledge(text,uuid) from public;
+revoke all on function public.gateway_claim_sms(text,integer) from public;
+revoke all on function public.gateway_update_sms(uuid,text,text,text) from public;
 revoke all on function public.reset_demo_data() from public;
 grant execute on function public.create_contact(text,text,text,text,text,boolean,boolean,text) to authenticated;
 grant execute on function public.save_alert(text,text,text,boolean,uuid[],text[],boolean) to authenticated;
@@ -356,6 +458,8 @@ grant execute on function public.reset_demo_data() to authenticated;
 grant execute on function public.student_login(text,text) to anon, authenticated;
 grant execute on function public.student_snapshot(text) to anon, authenticated;
 grant execute on function public.student_acknowledge(text,uuid) to anon, authenticated;
+grant execute on function public.gateway_claim_sms(text,integer) to authenticated;
+grant execute on function public.gateway_update_sms(uuid,text,text,text) to authenticated;
 
 -- Enable live admin updates. Safe to rerun.
 do $$

@@ -14,7 +14,8 @@ A working React, TypeScript, and Supabase alert-tracking system based on the sup
 - Cross-device alert viewing and acknowledgement
 - Live administrator updates when data changes
 - Reports, settings, users, audit history, and responsive layouts
-- Simulated SMS and email delivery logs
+- Real SMS queue with Android phone-and-SIM gateway status tracking
+- Simulated email delivery
 
 ## Technology
 
@@ -22,6 +23,7 @@ A working React, TypeScript, and Supabase alert-tracking system based on the sup
 - Vite
 - Supabase Postgres, Authentication, database functions, Row Level Security, and Realtime
 - GitHub Pages deployment workflow
+- Native Android SMS gateway (Java, no third-party runtime libraries)
 
 ## Setup
 
@@ -38,4 +40,4 @@ npm test
 
 ## Security scope
 
-This is a demo-ready system, not a production emergency-notification service. It separates administrator authentication from student phone/PIN sessions and never exposes a Supabase secret/service-role key. Full RBAC, rate limiting, verified SMS, provider webhooks, delivery guarantees, and production incident controls remain outside the demo scope.
+This is a demo-ready system, not a production emergency-notification service. It separates administrator authentication from student phone/PIN sessions and never exposes a Supabase secret/service-role key. Full RBAC, provider-grade delivery guarantees, inbound SMS acknowledgements, and production incident controls remain outside the demo scope. The Android gateway sends only to contacts whose consent checkbox is enabled and spaces small batches to reduce accidental carrier abuse.

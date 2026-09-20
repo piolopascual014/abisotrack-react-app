@@ -1,6 +1,6 @@
 # AbisoTrack shared demo setup
 
-This build uses GitHub Pages for the React interface and Supabase for authentication and shared data. It includes no sample records. SMS and email are demo logs only and do not contact external providers.
+This build uses GitHub Pages for the React interface, Supabase for authentication and shared data, and an optional Android phone-and-SIM gateway for real outgoing SMS. It includes no sample records. Email remains simulated.
 
 ## 1. Create the Supabase project
 
@@ -47,7 +47,21 @@ In the GitHub repository:
 4. Open **Settings → Pages** and select **GitHub Actions** as the source.
 5. Push this project to the `main` branch. The included deployment workflow builds and publishes the site.
 
-## 5. Demonstrate the system
+## 5. Enable the Android SMS gateway
+
+If the original database schema was installed before the gateway was added, run all of `supabase/migrations/20260921_sms_gateway.sql` once in the Supabase SQL Editor.
+
+1. In **Supabase → Authentication → Users**, create a separate gateway email/password account and enable **Auto Confirm User**.
+2. Open `android-gateway` in Android Studio.
+3. Copy `gateway.properties.example` to `gateway.properties` and enter the same project URL and publishable key used by the website. Never enter a secret/service-role key.
+4. Build and install the APK on the dedicated Android phone.
+5. Make the Globe SIM the phone's default SMS SIM.
+6. Open the gateway, allow notifications and SMS, enter the gateway account, and press **Sign in and start gateway**.
+7. Disable battery optimization for the gateway app during the demonstration.
+
+The gateway claims at most five queued messages at once and waits four seconds between sends. Only contacts with **Consent recorded** are added to the SMS queue.
+
+## 6. Demonstrate the system
 
 1. Sign in to the administrator workspace with the Supabase administrator account.
 2. Add a contact and assign a 4–8 digit demo PIN.
@@ -70,8 +84,13 @@ Real in this demo:
 - Reports, settings, and audit entries
 - Live administrator updates
 
-Simulated:
+Requires the Android gateway:
 
-- SMS delivery
+- Outgoing SMS through the installed SIM
+- Sent, delivered (when the carrier provides a receipt), and failed status updates
+
+Simulated or outside this demo:
+
 - Email delivery
+- Inbound SMS replies
 - Advanced role-based permissions

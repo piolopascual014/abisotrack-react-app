@@ -68,7 +68,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       supabase.from("alert_scopes").select("alert_id,node_id"),
       supabase.from("alert_channels").select("alert_id,channel"),
       supabase.from("alert_recipients").select("alert_id,contact_id,acknowledged_at"),
-      supabase.from("sms_logs").select("id,alert_id,contact_id,status,created_at").order("created_at", { ascending: false }),
+      supabase.from("sms_logs").select("id,alert_id,contact_id,status,created_at,updated_at,attempts,gateway_id,sent_at,delivered_at,error_message").order("created_at", { ascending: false }),
       supabase.from("app_users").select("id,name,email,role").order("created_at"),
       supabase.from("audit_entries").select("id,at,actor,action").order("at", { ascending: false }).limit(300),
       supabase.from("app_settings").select("institution_name,sms_fallback,email_copy,escalation_minutes").eq("id", 1).maybeSingle()
@@ -97,7 +97,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       contacts: contactRecords,
       treeNodes: nodeRecords,
       alerts: alertRecords,
-      smsLogs: (sms.data || []).map((row) => ({ id: row.id, alertId: row.alert_id, contactId: row.contact_id, status: row.status as "queued" | "delivered", createdAt: row.created_at })),
+      smsLogs: (sms.data || []).map((row) => ({
+        id: row.id, alertId: row.alert_id, contactId: row.contact_id,
+        status: row.status as "queued" | "sending" | "sent" | "delivered" | "failed",
+        createdAt: row.created_at, updatedAt: row.updated_at, attempts: row.attempts,
+        gatewayId: row.gateway_id, sentAt: row.sent_at, deliveredAt: row.delivered_at,
+        errorMessage: row.error_message
+      })),
       users: (users.data || []) as UserRecord[],
       audit: (audit.data || []).map((row) => ({ id: row.id, at: row.at, actor: row.actor, action: row.action })),
       settings: currentSettings ? {
