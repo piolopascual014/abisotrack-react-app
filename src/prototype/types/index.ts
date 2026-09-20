@@ -11,6 +11,7 @@ export interface Contact {
   unit: string;
   consent: boolean;
   appInstalled: boolean;
+  demoPin?: string;
 }
 
 export interface TreeNode {
@@ -33,6 +34,7 @@ export interface AlertRecord {
   createdAt: string;
   sentAt: string | null;
   acknowledgedContactIds: ID[];
+  recipientContactIds: ID[];
 }
 
 export interface SmsLog {

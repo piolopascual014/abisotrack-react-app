@@ -1,55 +1,41 @@
-# AbisoTrack
+# AbisoTrack shared demo
 
-A working React and TypeScript implementation of the supplied AbisoTrack interface. It is not a wireframe gallery.
+A working React, TypeScript, and Supabase alert-tracking system based on the supplied AbisoTrack interface.
 
-## Included workflows
+## Working features
 
-- Local administrator sign-in
-- Dashboard with live derived totals
-- Create, draft, send, inspect, and close alerts
-- Recipient scoping by all contacts or call-tree node
-- Contact and call-tree management
-- Locally simulated SMS queue entries
-- Derived reach reports
-- Local settings, user records, and audit history
-- Mobile contact sign-in
-- Mobile alert viewing and acknowledgment
-- Mobile call-tree and profile views
-- Responsive layouts
+- Real administrator email/password authentication
+- Shared cloud database with no seeded sample records
+- Contact creation with hashed student demo PINs
+- Call-tree management
+- Draft, send, inspect, and close alerts
+- Stable recipient snapshots for historical reporting
+- Student phone/PIN sign-in with expiring sessions
+- Cross-device alert viewing and acknowledgement
+- Live administrator updates when data changes
+- Reports, settings, users, audit history, and responsive layouts
+- Simulated SMS and email delivery logs
 
-## Storage
+## Technology
 
-There is no database and there are no seeded records. Data created through the interface is saved to browser `localStorage` under `abisotrack-app-v1`.
+- React 18 and TypeScript
+- Vite
+- Supabase Postgres, Authentication, database functions, Row Level Security, and Realtime
+- GitHub Pages deployment workflow
 
-This is appropriate for local demos and prototyping. It is not suitable for production authentication, multi-device synchronization, or real message delivery.
+## Setup
 
-## Run
+Follow [SETUP.md](SETUP.md). The database definition is in `supabase/schema.sql` and the required browser variables are listed in `.env.example`.
+
+## Commands
 
 ```bash
 npm install
 npm run dev
-```
-
-Open the URL printed by Vite, normally `http://127.0.0.1:4173`.
-
-## Build
-
-```bash
 npm run build
-```
-
-## Test
-
-```bash
 npm test
 ```
 
-## First-use flow
+## Security scope
 
-1. Sign in to the administrator workspace with any non-empty local credentials.
-2. Add a contact in Contacts.
-3. Add a Call Tree node whose name matches the contact's unit.
-4. Create and send an alert.
-5. Switch to Mobile App and sign in with the saved contact's phone number.
-6. Open and acknowledge the alert.
-7. Return to the administrator workspace to see the updated reach.
+This is a demo-ready system, not a production emergency-notification service. It separates administrator authentication from student phone/PIN sessions and never exposes a Supabase secret/service-role key. Full RBAC, rate limiting, verified SMS, provider webhooks, delivery guarantees, and production incident controls remain outside the demo scope.
