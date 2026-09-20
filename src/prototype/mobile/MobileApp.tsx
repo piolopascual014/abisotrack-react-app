@@ -59,13 +59,16 @@ export function MobileApp({ onSwitch }: { onSwitch(): void }) {
     return () => window.removeEventListener("beforeinstallprompt", capture);
   }, []);
   const contact = state.contacts.find((item) => item.id === state.mobileContactId);
+  const treeNodes = useMemo(
+    () => state.treeNodes.filter((node) => node.name === contact?.unit || node.contactId === contact?.id),
+    [state.treeNodes, contact?.id, contact?.unit]
+  );
   if (!contact) return <MobileLogin onSwitch={onSwitch}/>;
   const relevantAlerts = state.alerts.filter((alert) => alert.status !== "draft" && recipientsForAlert(alert).some((item) => item.id === contact.id));
   const activeAlerts = relevantAlerts.filter((alert) => alert.status === "active");
   const historyAlerts = relevantAlerts.filter((alert) => alert.status === "closed");
   const selected = relevantAlerts.find((alert) => alert.id === selectedAlertId) || null;
   const isOfficer = /officer|dean|faculty|administrator/i.test(contact.role);
-  const treeNodes = useMemo(() => state.treeNodes.filter((node) => node.name === contact.unit || node.contactId === contact.id), [state.treeNodes, contact]);
   const acknowledgedCount = relevantAlerts.filter((alert) => alert.acknowledgedContactIds.includes(contact.id)).length;
   const showNotification = async () => {
     if (typeof Notification === "undefined") return;
