@@ -294,10 +294,22 @@ begin
   join public.alerts a on a.id = ar.alert_id
   where ar.contact_id = v_contact.id and a.status <> 'draft';
 
+  with recursive anchor as (
+    select n.* from public.tree_nodes n
+    where n.contact_id = v_contact.id or n.name = v_contact.unit
+    order by (n.contact_id = v_contact.id) desc, n.created_at desc
+    limit 1
+  ), tree_path as (
+    select * from anchor
+    union all
+    select parent.*
+    from public.tree_nodes parent
+    join tree_path child on child.parent_id = parent.id
+  )
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', n.id, 'name', n.name, 'level', n.level, 'parentId', n.parent_id, 'contactId', n.contact_id
   ) order by n.created_at), '[]'::jsonb) into v_nodes
-  from public.tree_nodes n where n.name = v_contact.unit or n.contact_id = v_contact.id;
+  from tree_path n;
 
   select jsonb_build_object(
     'institutionName', institution_name, 'smsFallback', sms_fallback,

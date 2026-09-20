@@ -4,7 +4,7 @@ import { Brand } from "../components/Brand";
 import { Button, Card, EmptyState, Field, StatusBadge } from "../components/UI";
 import { formatDate, initials } from "../helpers";
 import { useAppState } from "../state/AppStateProvider";
-import type { AlertRecord } from "../types";
+import type { AlertRecord, TreeNode } from "../types";
 
 type MobilePage = "Home" | "Alerts" | "My Tree" | "Profile";
 type AlertTab = "active" | "history";
@@ -33,6 +33,36 @@ function alertLink(message: string) { return message.match(/https?:\/\/[^\s]+/i)
 
 function AlertSummary({ alert }: { alert: AlertRecord }) {
   return <div className="wire-alert-summary"><StatusBadge status={alert.status}/><h2>{alert.title}</h2><small>{alert.type} · {formatDate(alert.sentAt)}</small></div>;
+}
+
+function pathForContact(nodes: TreeNode[], contactId: string, unit: string) {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  let current = nodes.find((node) => node.contactId === contactId) || nodes.find((node) => node.name === unit);
+  const path: TreeNode[] = [];
+  const visited = new Set<string>();
+  while (current && !visited.has(current.id)) {
+    path.unshift(current);
+    visited.add(current.id);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+  return path;
+}
+
+function routeTime(sentAt: string | null, offset: number) {
+  if (!sentAt) return "—";
+  const time = new Date(sentAt);
+  time.setMinutes(time.getMinutes() + offset);
+  return time.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function ReachPath({ nodes, alert, acknowledged, contactId, unit }: { nodes: TreeNode[]; alert: AlertRecord | undefined; acknowledged: boolean; contactId: string; unit: string }) {
+  const middle = pathForContact(nodes, contactId, unit).slice(-2);
+  const steps = [
+    { id: "admin", name: "Admin", time: routeTime(alert?.sentAt || null, 0), done: true },
+    ...middle.map((node, index) => ({ id: node.id, name: node.name, time: routeTime(alert?.sentAt || null, index + 3), done: true })),
+    { id: "you", name: "You", time: acknowledged ? "Received" : "Pending", done: acknowledged }
+  ];
+  return <Card className="reach-path"><div className="mobile-section-heading"><h2>How this reached you</h2><small>My Tree</small></div><div className="path-steps">{steps.map((step, index) => <div className="path-step-wrap" key={step.id}>{index > 0 && <i/>}<span className={step.done ? "done" : "pending"}>{step.done ? <Check/> : <b className="pending-ring"/>}<strong>{step.name}</strong><small>{step.time}</small></span></div>)}</div></Card>;
 }
 
 function AlertDetail({ alert, contactId, contactName, contactUnit, isOfficer, onBack }: { alert: AlertRecord; contactId: string; contactName: string; contactUnit: string; isOfficer: boolean; onBack(): void }) {
@@ -80,7 +110,11 @@ export function MobileApp({ onSwitch }: { onSwitch(): void }) {
 
   let content: React.ReactNode;
   if (selected) content = <AlertDetail alert={selected} contactId={contact.id} contactName={contact.name} contactUnit={contact.unit} isOfficer={isOfficer} onBack={() => setSelectedAlertId(null)}/>;
-  else if (page === "Home") content = <><header className="mobile-greeting"><div><small>Good morning</small><h1>{contact.name}</h1></div><button className="notification-button" onClick={() => setPage("Alerts")}><Bell size={20}/>{activeAlerts.length > 0 && <em>{activeAlerts.length}</em>}</button></header>{activeAlerts[0] ? <Card className="mobile-active-alert" onClick={() => setSelectedAlertId(activeAlerts[0].id)}><StatusBadge status="active"/><h2>{activeAlerts[0].title}</h2><small>{activeAlerts[0].type} · {formatDate(activeAlerts[0].sentAt)}</small><p>{activeAlerts[0].message}</p><Button variant="danger">I have received this alert</Button></Card> : <Card><EmptyState title="You're up to date" description="When your school sends an alert, it appears here and as a phone notification."/></Card>}<Card className="reach-path"><div className="mobile-section-heading"><h2>How this reached you</h2><small>My Tree</small></div><div className="path-steps"><span className="done"><Check/>Admin</span><i/><span className="done"><Check/>Unit</span><i/><span className={activeAlerts.length ? "pending" : "done"}>{activeAlerts.length ? "○" : <Check/>}You</span></div></Card><div className="mobile-section-heading"><h2>Recent alerts</h2><button onClick={() => { setPage("Alerts"); setTab("history"); }}>See all</button></div>{relevantAlerts.length ? <div className="mobile-list">{relevantAlerts.slice(0, 3).map((alert) => <button key={alert.id} onClick={() => setSelectedAlertId(alert.id)}><span className={alert.acknowledgedContactIds.includes(contact.id) ? "closed" : alert.status}><Bell size={18}/></span><div><strong>{alert.title}</strong><small>{formatDate(alert.sentAt)} · {alert.acknowledgedContactIds.includes(contact.id) ? "Acknowledged" : "Pending"}</small></div><ChevronRight size={17}/></button>)}</div> : <EmptyState title="No alert history" description="Past alerts will appear here."/>}</>;
+  else if (page === "Home") {
+    const featured = activeAlerts[0];
+    const featuredAcknowledged = Boolean(featured?.acknowledgedContactIds.includes(contact.id));
+    content = <><header className="mobile-greeting"><div><small>Good morning</small><h1>{contact.name}</h1></div><button className="notification-button" onClick={() => setPage("Alerts")}><Bell size={20}/>{activeAlerts.length > 0 && <em>{activeAlerts.length}</em>}</button></header>{featured ? <Card className="mobile-active-alert" onClick={() => setSelectedAlertId(featured.id)}><StatusBadge status="active"/><h2>{featured.title}</h2><small>{featured.type} · {formatDate(featured.sentAt)}</small><p>{featured.message}</p><Button variant={featuredAcknowledged ? "secondary" : "danger"}>{featuredAcknowledged ? "Acknowledged — view details" : "I have received this alert"}</Button></Card> : <Card><EmptyState title="You're up to date" description="When your school sends an alert, it appears here and as a phone notification."/></Card>}<ReachPath nodes={treeNodes} alert={featured} acknowledged={featuredAcknowledged} contactId={contact.id} unit={contact.unit}/><div className="mobile-section-heading"><h2>Recent alerts</h2><button onClick={() => { setPage("Alerts"); setTab("history"); }}>See all</button></div>{relevantAlerts.length ? <div className="mobile-list">{relevantAlerts.slice(0, 3).map((alert) => <button key={alert.id} onClick={() => setSelectedAlertId(alert.id)}><span className={alert.acknowledgedContactIds.includes(contact.id) ? "closed" : alert.status}><Bell size={18}/></span><div><strong>{alert.title}</strong><small>{formatDate(alert.sentAt)} · {alert.acknowledgedContactIds.includes(contact.id) ? "Acknowledged" : "Pending"}</small></div><ChevronRight size={17}/></button>)}</div> : <EmptyState title="No alert history" description="Past alerts will appear here."/>}</>;
+  }
   else if (page === "Alerts") {
     const alerts = tab === "active" ? activeAlerts : historyAlerts;
     content = <><header className="mobile-page-header"><h1>My Alerts</h1></header><div className="mobile-tabs"><button className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}>Active</button><button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History</button></div>{alerts.length ? <div className="wire-alert-list">{alerts.map((alert) => <Card key={alert.id} className="wire-alert-card" onClick={() => setSelectedAlertId(alert.id)}><div><h2>{alert.title}</h2>{tab === "active" && <em>NEW</em>}<ChevronRight size={17}/></div><small>{alert.type}<br/>{formatDate(alert.sentAt)}</small>{tab === "active" && <><hr/><strong>Message</strong><p>{alert.message}</p><section className={alert.acknowledgedContactIds.includes(contact.id) ? "received" : "pending"}><small>Your status</small><b>{alert.acknowledgedContactIds.includes(contact.id) ? "Acknowledged" : "Pending acknowledgement"}</b></section></>}</Card>)}</div> : <Card><EmptyState title={tab === "active" ? "You're up to date" : "No previous alerts"} description={tab === "active" ? "When your school sends an alert, it appears here." : "Closed alerts will appear in your history."}/></Card>}</>;

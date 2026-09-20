@@ -1,6 +1,75 @@
 -- AbisoTrack wireframe parity: reminders and SMS reply acknowledgement.
 -- Safe to run more than once after the base schema and SMS gateway migration.
 
+-- Return the student's complete organizational path so the mobile app can show
+-- Admin -> college -> program/section -> student without exposing classmates.
+create or replace function public.student_snapshot(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_contact public.contacts;
+  v_alerts jsonb;
+  v_nodes jsonb;
+  v_settings jsonb;
+begin
+  select c.* into v_contact
+  from public.student_sessions s
+  join public.contacts c on c.id = s.contact_id
+  where s.token_hash = encode(digest(coalesce(p_token, ''), 'sha256'), 'hex')
+    and s.expires_at > now();
+  if v_contact.id is null then return null; end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', a.id, 'title', a.title, 'type', a.type, 'message', a.message,
+    'scopeNodeIds', coalesce((select jsonb_agg(s.node_id) from public.alert_scopes s where s.alert_id = a.id), '[]'::jsonb),
+    'allContacts', a.all_contacts,
+    'channels', coalesce((select jsonb_agg(ch.channel) from public.alert_channels ch where ch.alert_id = a.id), '[]'::jsonb),
+    'status', a.status, 'createdAt', a.created_at, 'sentAt', a.sent_at,
+    'acknowledgedContactIds', case when ar.acknowledged_at is null then '[]'::jsonb else jsonb_build_array(v_contact.id) end,
+    'recipientContactIds', jsonb_build_array(v_contact.id)
+  ) order by a.created_at desc), '[]'::jsonb) into v_alerts
+  from public.alert_recipients ar
+  join public.alerts a on a.id = ar.alert_id
+  where ar.contact_id = v_contact.id and a.status <> 'draft';
+
+  with recursive anchor as (
+    select n.* from public.tree_nodes n
+    where n.contact_id = v_contact.id or n.name = v_contact.unit
+    order by (n.contact_id = v_contact.id) desc, n.created_at desc
+    limit 1
+  ), tree_path as (
+    select * from anchor
+    union all
+    select parent.* from public.tree_nodes parent
+    join tree_path child on child.parent_id = parent.id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', n.id, 'name', n.name, 'level', n.level,
+    'parentId', n.parent_id, 'contactId', n.contact_id
+  ) order by n.created_at), '[]'::jsonb) into v_nodes
+  from tree_path n;
+
+  select jsonb_build_object(
+    'institutionName', institution_name, 'smsFallback', sms_fallback,
+    'emailCopy', email_copy, 'escalationMinutes', escalation_minutes
+  ) into v_settings from public.app_settings where id = 1;
+
+  return jsonb_build_object(
+    'contact', jsonb_build_object(
+      'id', v_contact.id, 'name', v_contact.name, 'phone', v_contact.phone,
+      'email', v_contact.email, 'role', v_contact.role, 'unit', v_contact.unit,
+      'consent', v_contact.consent, 'appInstalled', v_contact.app_installed
+    ),
+    'alerts', v_alerts,
+    'treeNodes', v_nodes,
+    'settings', v_settings
+  );
+end;
+$$;
+
 create or replace function public.queue_alert_reminders(p_alert_id uuid)
 returns integer
 language plpgsql
