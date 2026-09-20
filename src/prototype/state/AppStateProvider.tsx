@@ -22,6 +22,7 @@ export type Action =
   | { type: "SAVE_ALERT"; alert: Omit<AlertRecord, "id" | "createdAt" | "sentAt" | "acknowledgedContactIds" | "recipientContactIds">; send: boolean }
   | { type: "CLOSE_ALERT"; id: string }
   | { type: "ACK_ALERT"; alertId: string; contactId: string }
+  | { type: "REMIND_PENDING"; alertId: string }
   | { type: "ADD_USER"; user: Omit<UserRecord, "id"> }
   | { type: "UPDATE_SETTINGS"; settings: AppSettings }
   | { type: "RESET" };
@@ -240,6 +241,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         await loadStudentData(token);
         return;
       }
+      if (action.type === "REMIND_PENDING" && !state.adminSession) {
+        const token = sessionStorage.getItem(STUDENT_TOKEN_KEY);
+        if (!token) throw new Error("Your student session has expired. Please sign in again.");
+        const { error: reminderError } = await supabase.rpc("student_queue_reminders", { p_token: token, p_alert_id: action.alertId });
+        if (reminderError) throw reminderError;
+        await loadStudentData(token);
+        return;
+      }
 
       if (!state.adminSession) throw new Error("Administrator sign-in required.");
       const actor = state.adminSession.name;
@@ -274,6 +283,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         case "CLOSE_ALERT":
           result = await supabase.from("alerts").update({ status: "closed" }).eq("id", action.id);
           if (!result.error) await supabase.from("audit_entries").insert({ actor, action: "Closed an alert" });
+          break;
+        case "REMIND_PENDING":
+          result = await supabase.rpc("queue_alert_reminders", { p_alert_id: action.alertId });
           break;
         case "ADD_USER":
           result = await supabase.from("app_users").insert(action.user);

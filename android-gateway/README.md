@@ -5,8 +5,8 @@ This Android app turns one dedicated Android phone and its active SIM into the o
 ## Safety and scope
 
 - The gateway starts only after the operator opens the app and presses the start button.
-- It requests only internet, notification, foreground-service, and SMS-send permissions.
-- It does not read messages, contacts, call logs, or device files.
+- It requests internet, notification, foreground-service, SMS-send, and SMS-receive permissions.
+- It reads only incoming SMS broadcasts needed to recognize the exact reply `1`; it does not read message history, contacts, call logs, or device files.
 - It sends only queue entries created for contacts with recorded consent.
 - Each batch contains at most five messages with four seconds between sends.
 - A queue item is attempted at most three times.
@@ -37,6 +37,6 @@ This Android app turns one dedicated Android phone and its active SIM into the o
 5. Sign in with the dedicated gateway account and start it.
 6. Keep its persistent notification visible.
 7. In the web administrator app, create an alert, select **SMS**, and send it.
+8. A recipient may reply **1** to acknowledge their latest active alert without signing in to the web app.
 
 The web SMS Logs screen updates from queued to sending, sent, delivered, or failed. Some carriers do not return a delivery receipt; in that case a successfully handed-off message remains `sent`.
-

@@ -94,7 +94,7 @@ begin
     where s.id = c.id
     returning s.id, s.alert_id, s.contact_id, s.attempts
   )
-  select c.id, ct.phone, 'ABISOTRACK: ' || a.title || E'\n' || a.message, c.attempts
+  select c.id, ct.phone, 'ABISOTRACK: ' || a.title || E'\n' || a.message || E'\nReply 1 to acknowledge.', c.attempts
   from claimed c
   join public.contacts ct on ct.id = c.contact_id
   join public.alerts a on a.id = c.alert_id

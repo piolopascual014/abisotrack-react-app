@@ -1,0 +1,13 @@
+{
+  "name": "AbisoTrack",
+  "short_name": "AbisoTrack",
+  "description": "Institutional alerts, acknowledgements, call-tree relays, and SMS fallback.",
+  "start_url": "./?view=mobile",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f9fc",
+  "theme_color": "#064e3b",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

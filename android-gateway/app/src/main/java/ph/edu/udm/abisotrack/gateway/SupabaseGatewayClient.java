@@ -56,6 +56,11 @@ final class SupabaseGatewayClient {
         authorizedRequest("/rest/v1/rpc/gateway_update_sms", body);
     }
 
+    void acknowledgeBySms(String senderPhone) throws Exception {
+        JSONObject body = new JSONObject().put("p_phone", senderPhone);
+        authorizedRequest("/rest/v1/rpc/gateway_acknowledge_by_sms", body);
+    }
+
     private synchronized String authorizedRequest(String path, JSONObject body) throws Exception {
         ensureFreshSession();
         try {
@@ -120,4 +125,3 @@ final class SupabaseGatewayClient {
 
     private static final class UnauthorizedException extends Exception {}
 }
-
